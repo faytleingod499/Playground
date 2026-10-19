@@ -1,3 +1,7 @@
+## 1.3.1
+- Hide and Seek: seekers really can't see the hiders' names now. (The name tag is moved out of the player when it
+  spawns, so the old way of hiding it missed it.) Speech bubbles still show, so talking gives you away.
+
 ## 1.3.0
 - New game: Hide and Seek. 45 seconds to hide while the seeker's screen is dark, then 5 minutes to search. Get close and press F to find someone. The starter chooses whether found hiders join the seekers or are out. Seekers can't see hiders' name tags.
 

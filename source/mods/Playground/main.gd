@@ -832,7 +832,10 @@ func _result_line(id, what, gold, me):
 	results_list.add_child(line)
 
 
-# hiders' name tags (the "title" over their heads) are hidden from a seeker, and put back afterwards
+# hiders' names (and titles) over their heads are hidden from a seeker, and put back afterwards.
+# The name tag mesh ("title") is moved out of the player into the world when it spawns and the game sets its
+# visibility every frame, so the text itself is hidden instead: it is drawn by the player's own Viewport
+# (Viewport/player_label, name and title in its VBoxContainer). Speech bubbles stay, talking gives you away.
 func _hide_tags(ids, players):
 	for id in hidden_tags.keys():
 		if not id in ids:
@@ -840,10 +843,19 @@ func _hide_tags(ids, players):
 	for id in ids:
 		if hidden_tags.has(id) or not players.has(id):
 			continue
-		var tag = players[id].get_node_or_null("title")
-		if tag != null and tag is Spatial:
+		var tag = _name_tag(players[id])
+		if tag != null:
 			tag.visible = false
 			hidden_tags[id] = tag
+
+
+func _name_tag(player):
+	var tag = player.get_node_or_null("Viewport/player_label/VBoxContainer")
+	if tag == null:
+		var label = player.get("title")
+		if label is CanvasItem:
+			tag = label
+	return tag if tag is CanvasItem else null
 
 
 func _show_tag(id):
