@@ -29,3 +29,14 @@ Players with Playground see the swing set. Players without it still see you sitt
 
 - Only players with Playground take part or see the star. Everyone else sees nothing unusual.
 - Everything goes through the Steam lobby, so it works on any server and needs nothing from the host.
+
+## Building
+
+The mod is plain GDScript (plus models and sounds) packed into `package/Playground/Playground.pck` with the Godot 3.5 engine's own packer:
+
+```
+godot --no-window -s pack.gd
+./build.sh
+```
+
+`pack.gd` packs `source/mods/Playground/` into the pck. `build.sh` then makes `out/Playground-mod.zip` (the folder for `GDWeave/mods`) and the Thunderstore upload zip from `thunderstore/`. Requires [GDWeave](https://thunderstore.io/c/webfishing/p/NotNet/GDWeave/).
