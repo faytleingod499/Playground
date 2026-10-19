@@ -1,3 +1,7 @@
+## 1.2.5
+- The mod has its own GitHub repository now: https://github.com/faytleingod499/Playground
+- Released under the MIT License: you're free to copy, change and share your own versions.
+
 ## 1.2.4
 - Whoever is on a swing leans with the seat, so they stay square to the chains as it swings.
 

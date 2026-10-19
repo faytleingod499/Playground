@@ -10,6 +10,7 @@ rm -f out/Playground-mod.zip out/Playground-$V.zip
 (cd package && zip -qr ../out/Playground-mod.zip Playground)
 T=$(mktemp -d)
 cp thunderstore/manifest.json thunderstore/README.md thunderstore/CHANGELOG.md thunderstore/icon.png $T/
+cp LICENSE $T/
 mkdir -p $T/GDWeave/mods/Playground
 cp package/Playground/manifest.json package/Playground/Playground.pck $T/GDWeave/mods/Playground/
 (cd $T && zip -qr - .) > out/Playground-$V.zip
