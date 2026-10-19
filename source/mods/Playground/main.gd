@@ -22,7 +22,7 @@ extends Node
 # <n>;<target>;<t> is the last tag that player made: tag number n made <target> "it", <t> seconds into the
 # round (by the tagger's clock). The starter's tag 0 is the first "it". The highest number is "it" now.
 
-const VERSION = "1.2.6"
+const VERSION = "1.2.7"
 const SYNC_KEY = "playground"
 const SKELETON_PATH = "body/player_body/Armature/Skeleton"
 const POPUP_ID = "PLAYGROUND"
@@ -33,7 +33,7 @@ const JOIN_TIME = 10.0       # seconds to say yes
 const COUNTDOWN = 5.0        # after everyone is sent to spawn
 const ROUND_TIME = 180.0     # how long a round of tag lasts
 const RESULTS_TIME = 12.0    # how long the scoreboard stays up
-const IT_SPEED = 1.10        # "it" runs this much faster
+const IT_SPEED = 1.30        # "it" runs this much faster
 const TAG_RANGE = 1.1        # how close "it" has to get (times their size), flat distance
 const TAG_HEIGHT = 1.6       # and no further apart than this up and down
 const NO_TAG_BACK = 3.0      # seconds the one who tagged you is safe from you
@@ -85,6 +85,7 @@ var wait_label
 var bar
 var bar_label
 var big
+var hint
 var results
 var results_list
 var toast
@@ -363,6 +364,7 @@ func _update_my_round(players, me):
 	wait_panel.visible = false
 	bar.visible = false
 	big.visible = false
+	hint.visible = false
 	results.visible = results_until > clock
 	if my_round == "":
 		return
@@ -445,6 +447,14 @@ func _update_my_round(players, me):
 		big.visible = true
 		big.text = str(int(ceil(-t)))
 		_place_top(big, 0.32)
+		# and what to do about it, a little smaller underneath
+		hint.visible = true
+		if it == me:
+			hint.text = "You're it! Wait for the count, then chase them down"
+		else:
+			hint.text = "RUN! " + _name_of(it) + " is it and starts chasing in " + str(int(ceil(-t))) + "..."
+		hint.add_color_override("font_color", Color(1.0, 0.85, 0.5) if it == me else Color(1, 1, 1))
+		_place_top(hint, 0.42)
 		if it == me:
 			_place_bar("Tag  -  You're it! Count to five...", true)
 		else:
@@ -454,6 +464,9 @@ func _update_my_round(players, me):
 		big.visible = true
 		big.text = "GO!"
 		_place_top(big, 0.32)
+		hint.visible = true
+		hint.text = "Go get them!" if it == me else _name_of(it) + " is coming!"
+		_place_top(hint, 0.42)
 	var left = max(duration - t, 0.0)
 	var time_text = "%d:%02d" % [int(left) / 60, int(left) % 60]
 	if it == me:
@@ -909,7 +922,7 @@ func _refresh_button():
 		theme_applied = true
 		var main = hud.get_node_or_null("main")
 		if main != null and main.theme != null:
-			for control in [star_button, menu, invite_panel, wait_panel, bar, big, results, toast] + themed:
+			for control in [star_button, menu, invite_panel, wait_panel, bar, big, hint, results, toast] + themed:
 				control.theme = main.theme
 	if not show and menu.visible:
 		_close_menu()
@@ -1044,6 +1057,18 @@ func _build_ui():
 	big.rect_scale = Vector2(3.5, 3.5)
 	big.align = Label.ALIGN_CENTER
 	layer.add_child(big)
+
+	# what to do during the countdown ("RUN! ... starts chasing in 4..."), under the numbers
+	hint = Label.new()
+	hint.visible = false
+	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint.add_color_override("font_color", Color(1, 1, 1))
+	hint.add_color_override("font_color_shadow", Color(0, 0, 0, 0.85))
+	hint.add_constant_override("shadow_offset_x", 2)
+	hint.add_constant_override("shadow_offset_y", 2)
+	hint.rect_scale = Vector2(1.6, 1.6)
+	hint.align = Label.ALIGN_CENTER
+	layer.add_child(hint)
 
 	# the scoreboard
 	results = _panel(0.8)

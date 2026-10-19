@@ -1,3 +1,7 @@
+## 1.2.7
+- Tag: "it" runs 30% faster (was 10%).
+- During the countdown everyone is told what to do: runners get "RUN! ... starts chasing in 4...", and "it" is told to wait for the count.
+
 ## 1.2.6
 - Tag: the star no longer stays over a player after they've left the round, or once everyone has left.
 
