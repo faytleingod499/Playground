@@ -1,3 +1,6 @@
+## 1.3.0
+- New game: Hide and Seek. 45 seconds to hide while the seeker's screen is dark, then 5 minutes to search. Get close and press F to find someone. The starter chooses whether found hiders join the seekers or are out. Seekers can't see hiders' name tags.
+
 ## 1.2.7
 - Tag: "it" runs 30% faster (was 10%).
 - During the countdown everyone is told what to do: runners get "RUN! ... starts chasing in 4...", and "it" is told to wait for the count.

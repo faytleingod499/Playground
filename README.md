@@ -1,6 +1,6 @@
 # Playground
 
-Games and toys to enjoy with everyone who has the mod, on any server: **Tag** and a **swing set**, with more on the way.
+Games and toys to enjoy with everyone who has the mod, on any server: **Tag**, **Hide and Seek** and a **swing set**, with more on the way.
 
 *This mod was created with the assistance of AI.*
 
@@ -14,6 +14,16 @@ Games and toys to enjoy with everyone who has the mod, on any server: **Tag** an
 6. After **3 minutes** the round ends and everyone sees how long each player was it. **Least time wins.**
 
 You can leave a round any time from the J menu. If whoever is it leaves, someone else is picked.
+
+## Hide and Seek
+
+1. Open the Playground menu (the star button, or **J**). Tick or untick **Found hiders join the seekers**, then choose **Start Hide and Seek**.
+2. Everyone with Playground has **10 seconds** to join with **Y**. Everyone who joins is sent back to spawn.
+3. One player, picked at random, is the **seeker**. Their screen goes dark and they can't move for **45 seconds** while everyone else hides.
+4. Then the search is on, for **5 minutes**. When a seeker gets close to a hider, **F  Found!** appears over them. Press **F** to find them.
+5. Found hiders either **join the seekers** and help hunt, or are **out** and watch. Whoever started the round picks which.
+6. Seekers can't see the hiders' name tags, so names don't give anyone away.
+7. Find everyone and the **seekers win**. If anyone is still hidden when time runs out, the **hiders win**. Everyone then sees who was found, when, and by whom.
 
 ## Swing set
 

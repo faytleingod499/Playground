@@ -1,7 +1,14 @@
 extends Node
 
 # Playground
-# Games for everyone who has the mod, on any server. The first one is Tag.
+# Games for everyone who has the mod, on any server: Tag and Hide and Seek (and a swing set, swing.gd).
+#
+# Hide and Seek: the same join window and trip to spawn, then one seeker (picked at random) counts to 45
+# with their screen dark and can't move while everyone else hides. For the next 5 minutes the seeker
+# hunts: close to a hider, "F  Found!" appears over them. The starter chooses whether found hiders join
+# the seekers or are out. A seeker can't see the hiders' name tags. Everyone found: the seekers win;
+# anyone still hidden when time runs out: the hiders win. Its roles go out with "hs" in front
+# ("hsopen", "hsgo", ...), and its open/go lines end with ";1" (found join the seekers) or ";0".
 #
 # Click the little star button (drag it anywhere, like the EtherPets paw) or press J to open the
 # Playground menu and start a round. Everyone with the mod gets a notice and has
@@ -22,7 +29,7 @@ extends Node
 # <n>;<target>;<t> is the last tag that player made: tag number n made <target> "it", <t> seconds into the
 # round (by the tagger's clock). The starter's tag 0 is the first "it". The highest number is "it" now.
 
-const VERSION = "1.2.7"
+const VERSION = "1.3.0"
 const SYNC_KEY = "playground"
 const SKELETON_PATH = "body/player_body/Armature/Skeleton"
 const POPUP_ID = "PLAYGROUND"
@@ -38,6 +45,12 @@ const TAG_RANGE = 1.1        # how close "it" has to get (times their size), fla
 const TAG_HEIGHT = 1.6       # and no further apart than this up and down
 const NO_TAG_BACK = 3.0      # seconds the one who tagged you is safe from you
 const GONE_GRACE = 3.0       # "it" left: after this long someone else is picked
+const HIDE_TIME = 45.0       # hide and seek: how long the hiders get to hide
+const SEEK_TIME = 300.0      # and how long the search lasts
+const FIND_RANGE = 2.2       # how close a seeker has to be to find someone (times their size)
+const FIND_HEIGHT = 2.5
+const FIND_KEY = KEY_F
+const GAME_NAMES = {"tag": "Tag", "hide": "Hide and Seek"}
 const SPEED_VARS = ["walk_speed", "sprint_speed", "sneak_speed", "slow_walk_speed"]
 const CONFIG_PATH = "user://playground.json"
 const DEFAULT_BUTTON_POS = Vector2(16, 184)   # just under the EtherPets paw
@@ -53,6 +66,9 @@ var answered = {}            # rounds I said yes or no to
 # my side
 var my_count = 0             # rounds I've started
 var my_round = ""            # the round I'm in ("" when none)
+var my_kind = "tag"          # "tag" or "hide" (hide and seek)
+var my_infect = true         # hide and seek: found hiders join the seekers (or else they're out)
+var infect_choice = true     # what the menu's checkbox says, remembered
 var my_role = ""             # "open", "join", "go", "play"
 var my_ids = []              # as starter: who is playing
 var my_duration = ROUND_TIME
@@ -75,6 +91,13 @@ var layer
 var menu
 var menu_status
 var menu_tag
+var menu_hide
+var menu_infect
+var blackout                 # the seeker's closed eyes
+var find_prompt              # "F  Found!" over a hider near a seeker
+var find_target = 0
+var hidden_tags = {}         # steam id -> name tag I've hidden (hiders' names, from a seeker)
+var last_found = {}          # round -> how many finds I've already announced
 var menu_leave
 var invite_panel
 var invite_label
@@ -88,6 +111,7 @@ var big
 var hint
 var results
 var results_list
+var results_title
 var toast
 var toast_until = 0.0
 var locked_hud = null
@@ -177,9 +201,13 @@ func _players():
 func _state_text():
 	if my_round == "" or my_role == "":
 		return ""
-	var t = "1;" + my_round + ";" + my_role
+	# hide and seek says its roles with "hs" in front, so older versions of the mod (which only know tag)
+	# leave those rounds alone
+	var hide = my_kind == "hide"
+	var t = "1;" + my_round + ";" + ("hs" if hide else "") + my_role
+	var infect = "1" if my_infect else "0"
 	if my_role == "open":
-		return t + ";tag"
+		return t + (";hide;" + infect if hide else ";tag")
 	if my_role == "join":
 		return t
 	var tag = ";" + str(my_n) + ";" + str(my_target) + ";" + str(stepify(my_t, 0.1))
@@ -187,7 +215,7 @@ func _state_text():
 		var ids = []
 		for id in my_ids:
 			ids.append(str(id))
-		return t + ";" + PoolStringArray(ids).join(",") + ";" + str(int(my_duration)) + tag
+		return t + ";" + PoolStringArray(ids).join(",") + ";" + str(int(my_duration)) + tag + (";" + infect if hide else "")
 	return t + tag
 
 
@@ -209,9 +237,12 @@ func _parse(text):
 	var b = str(text).split(";")
 	if b.size() < 3 or b[0] != "1" or b[1] == "":
 		return null
-	var s = {"round": b[1], "role": b[2], "n": -1, "target": 0, "t": 0.0}
+	var s = {"round": b[1], "role": b[2], "n": -1, "target": 0, "t": 0.0, "kind": "tag", "infect": true}
+	if s["role"].begins_with("hs"):
+		s["kind"] = "hide"
+		s["role"] = s["role"].substr(2)
 	if s["role"] == "open":
-		s["kind"] = b[3] if b.size() > 3 else "tag"
+		s["infect"] = not (b.size() > 4 and b[4] == "0")
 	elif s["role"] == "go":
 		if b.size() < 8:
 			return null
@@ -223,6 +254,7 @@ func _parse(text):
 		s["n"] = int(b[5])
 		s["target"] = int(b[6])
 		s["t"] = float(b[7])
+		s["infect"] = not (b.size() > 8 and b[8] == "0")
 	elif s["role"] == "play":
 		if b.size() < 6:
 			return null
@@ -264,9 +296,12 @@ func _update_rounds(me):
 		if _round_host(r) <= 0:
 			continue
 		if not rounds.has(r):
-			rounds[r] = {"host": _round_host(r), "kind": "tag", "open_at": -1.0, "go_at": -1.0, "ids": [],
-				"duration": ROUND_TIME, "events": {}, "ended": false}
+			rounds[r] = {"host": _round_host(r), "kind": s["kind"], "open_at": -1.0, "go_at": -1.0, "ids": [],
+				"duration": ROUND_TIME, "events": {}, "ended": false, "infect": true,
+				"count": HIDE_TIME if s["kind"] == "hide" else COUNTDOWN}
 		var round_ = rounds[r]
+		if id == round_["host"] and s["role"] in ["open", "go"]:
+			round_["infect"] = s["infect"]
 		if s["role"] == "open" and id == round_["host"] and round_["open_at"] < 0:
 			round_["open_at"] = clock
 			round_["kind"] = s.get("kind", "tag")
@@ -278,12 +313,16 @@ func _update_rounds(me):
 		if s["role"] in ["go", "play"] and s["n"] >= 0 and not round_["events"].has(s["n"]):
 			round_["events"][s["n"]] = {"target": s["target"], "t": s["t"], "by": id}
 			if round_["go_at"] >= 0 and r == my_round and s["n"] > 0 and id != me:
-				_show_toast(_name_of(id) + " tagged " + _name_of(s["target"]) + "!")
+				if round_["kind"] == "hide":
+					if s["target"] != me:
+						_show_toast(_name_of(id) + " found " + _name_of(s["target"]) + "!")
+				else:
+					_show_toast(_name_of(id) + " tagged " + _name_of(s["target"]) + "!")
 	# forget rounds long over, or that never got going
 	for r in rounds.keys():
 		var round_ = rounds[r]
 		var since = round_["go_at"] if round_["go_at"] >= 0 else round_["open_at"]
-		var life = COUNTDOWN + round_["duration"] + RESULTS_TIME + 30.0 if round_["go_at"] >= 0 else JOIN_TIME + 20.0
+		var life = round_["count"] + round_["duration"] + RESULTS_TIME + 30.0 if round_["go_at"] >= 0 else JOIN_TIME + 20.0
 		if r != my_round and (since < 0 or clock - since > life):
 			rounds.erase(r)
 
@@ -292,7 +331,7 @@ func _update_rounds(me):
 func _round_time(round_):
 	if round_["go_at"] < 0:
 		return -999.0
-	return clock - round_["go_at"] - COUNTDOWN
+	return clock - round_["go_at"] - round_.get("count", COUNTDOWN)
 
 
 func _current_it(round_):
@@ -324,11 +363,21 @@ func _active(round_id, round_, me):
 # --- my round ---
 
 func start_tag():
+	_start_game("tag")
+
+
+func start_hide():
+	_start_game("hide")
+
+
+func _start_game(kind):
 	var net = get_node_or_null("/root/Network")
 	var me = int(net.STEAM_ID) if net != null else 0
 	if me <= 0 or my_round != "":
 		return
 	my_count += 1
+	my_kind = kind
+	my_infect = infect_choice
 	my_round = str(me) + "x" + str(OS.get_unix_time() % 100000) + str(my_count)
 	my_ids = []
 	my_n = -1
@@ -338,7 +387,7 @@ func start_tag():
 	_say("open")
 	_flush_state()
 	_close_menu()
-	_show_toast("Tag! Waiting for players to join...")
+	_show_toast(GAME_NAMES[kind] + "! Waiting for players to join...")
 
 
 func leave_round():
@@ -350,6 +399,9 @@ func leave_round():
 
 
 func _clear_mine():
+	_show_tags()
+	find_target = 0
+	_set_find_flag(false)
 	my_round = ""
 	my_role = ""
 	my_ids = []
@@ -365,6 +417,9 @@ func _update_my_round(players, me):
 	bar.visible = false
 	big.visible = false
 	hint.visible = false
+	blackout.visible = false
+	find_prompt.visible = false
+	big.rect_scale = Vector2(3.5, 3.5)
 	results.visible = results_until > clock
 	if my_round == "":
 		return
@@ -378,15 +433,15 @@ func _update_my_round(players, me):
 			if id != me and states[id]["round"] == my_round and states[id]["role"] == "join":
 				joined.append(id)
 		wait_panel.visible = _hud_free()
-		wait_label.text = "Tag starts in " + str(int(ceil(max(left, 0.0)))) + "s   " + str(joined.size()) + (" player joined" if joined.size() == 1 else " players joined")
+		wait_label.text = GAME_NAMES[my_kind] + " starts in " + str(int(ceil(max(left, 0.0)))) + "s   " + str(joined.size()) + (" player joined" if joined.size() == 1 else " players joined")
 		_place_top(wait_panel, 0.18)
 		if left <= 0.0:
 			if joined.empty():
-				_show_toast("Nobody joined the round of tag.")
+				_show_toast("Nobody joined the round of " + GAME_NAMES[my_kind] + ".")
 				_clear_mine()
 				return
 			my_ids = [me] + joined
-			my_duration = ROUND_TIME
+			my_duration = SEEK_TIME if my_kind == "hide" else ROUND_TIME
 			my_n = 0
 			my_target = my_ids[randi() % my_ids.size()]
 			my_t = 0.0
@@ -402,11 +457,11 @@ func _update_my_round(players, me):
 
 	if round_["go_at"] < 0:
 		if my_role == "join" and clock - my_since > JOIN_TIME + 15.0:
-			_show_toast("The round of tag didn't start.")
+			_show_toast("The round of " + GAME_NAMES[my_kind] + " didn't start.")
 			_clear_mine()
 		return
 	if not me in round_["ids"]:
-		_show_toast("Too late, that round of tag already started.")
+		_show_toast("Too late, that round of " + GAME_NAMES[my_kind] + " already started.")
 		_clear_mine()
 		return
 
@@ -415,6 +470,10 @@ func _update_my_round(players, me):
 	if not started:
 		started = true
 		_go_to_spawn()
+
+	if round_["kind"] == "hide":
+		_run_hide(round_, players, me)
+		return
 
 	var t = _round_time(round_)
 	var duration = round_["duration"]
@@ -440,7 +499,7 @@ func _update_my_round(players, me):
 		_finish(round_, me)
 		return
 
-	_apply_speed(players.get(me), it == me, t)
+	_apply_speed(players.get(me), (0.0 if t < 0.0 else IT_SPEED) if it == me else 1.0)
 
 	# the countdown, then the clock and who is "it" up top
 	if t < 0.0:
@@ -560,6 +619,7 @@ func _by_time(a, b):
 
 func _finish(round_, me):
 	_restore_speeds()
+	results_title.text = "Tag is over! Least time as it wins"
 	var list = _scores(round_, round_.get("end_t", round_["duration"]))
 	for child in results_list.get_children():
 		results_list.remove_child(child)
@@ -583,9 +643,264 @@ func _finish(round_, me):
 	_clear_mine()
 
 
+# --- hide and seek ---
+# Same rounds as tag: the starter's tag 0 picks the first seeker, and every later "tag" is a find
+# (n, the hider found, when, and by whom). The seekers are the first one plus, when found hiders join the
+# seekers, everyone found so far. Otherwise found hiders are out and watch.
+
+func _game_phrase(round_):
+	if round_["kind"] == "hide":
+		return "Hide and Seek" + (" (found hiders become seekers)" if round_["infect"] else " (found hiders are out)")
+	return "a round of Tag"
+
+
+func _hide_info(round_):
+	var ns = round_["events"].keys()
+	ns.sort()
+	var first = 0
+	var found = {}               # hider -> [round time found, by whom]
+	for n in ns:
+		var e = round_["events"][n]
+		if n == 0:
+			first = e["target"]
+		elif not found.has(e["target"]) and e["target"] != first:
+			found[e["target"]] = [e["t"], e["by"]]
+	var seekers = [first] if first != 0 else []
+	if round_["infect"]:
+		for id in found.keys():
+			seekers.append(id)
+	return {"first": first, "found": found, "seekers": seekers}
+
+
+func _run_hide(round_, players, me):
+	var t = _round_time(round_)
+	var duration = round_["duration"]
+	var active = _active(my_round, round_, me)
+	var info = _hide_info(round_)
+	var seekers = info["seekers"]
+	var found = info["found"]
+	var first = info["first"]
+	var i_seek = me in seekers
+	var i_out = found.has(me) and not round_["infect"]
+	var hiders_left = []
+	var seekers_on = []
+	for id in active:
+		if id in seekers:
+			seekers_on.append(id)
+		elif not found.has(id):
+			hiders_left.append(id)
+
+	# over: everyone found, every seeker gone, or time's up
+	if t >= 0.0 and not round_["ended"]:
+		var winner = ""
+		if hiders_left.empty():
+			winner = "seekers"
+		elif seekers_on.empty() or t >= duration:
+			winner = "hiders"
+		if winner != "":
+			round_["ended"] = true
+			round_["end_t"] = min(t, duration)
+			_finish_hide(round_, me, info, winner)
+			return
+
+	# I just got found
+	var told = last_found.get(my_round, {})
+	if found.has(me) and not told.has(me):
+		told[me] = true
+		last_found[my_round] = told
+		var by = _name_of(found[me][1])
+		_notify("You were found by " + by + "! " + ("Now help find the others." if round_["infect"] else "You're out, watch the rest."))
+
+	# the first seeker keeps their eyes shut and stays put while the others hide
+	var counting = t < 0.0 and me == first
+	_apply_speed(players.get(me), 0.0 if counting else 1.0)
+	blackout.visible = counting
+	if counting:
+		blackout.rect_size = blackout.get_viewport_rect().size
+
+	if t < 0.0:
+		big.visible = true
+		big.text = str(int(ceil(-t)))
+		_place_top(big, 0.32)
+		hint.visible = true
+		if counting:
+			hint.text = "You're the seeker! Eyes closed... count to " + str(int(round_["count"]))
+			_place_bar("Hide and Seek  -  You're seeking. Counting...", true)
+		else:
+			hint.text = "HIDE! " + _name_of(first) + " starts looking in " + str(int(ceil(-t))) + "..."
+			_place_bar("Hide and Seek  -  " + _name_of(first) + " is seeking. Hide!", false)
+		hint.add_color_override("font_color", Color(1.0, 0.85, 0.5) if counting else Color(1, 1, 1))
+		_place_top(hint, 0.42)
+		_show_tags()
+		return
+	if t < 1.5:
+		big.visible = true
+		big.text = "Ready or not!"
+		big.rect_scale = Vector2(2.2, 2.2)
+		_place_top(big, 0.32)
+		hint.visible = true
+		hint.text = "Go find them!" if i_seek else _name_of(first) + " is coming..."
+		_place_top(hint, 0.42)
+	else:
+		big.rect_scale = Vector2(3.5, 3.5)
+	var left = max(duration - t, 0.0)
+	var time_text = "%d:%02d" % [int(left) / 60, int(left) % 60]
+	var n_left = str(hiders_left.size()) + (" hider left" if hiders_left.size() == 1 else " hiders left")
+	if i_seek:
+		_place_bar("Hide and Seek  " + time_text + "   You're seeking  -  " + n_left, true)
+	elif i_out:
+		_place_bar("Hide and Seek  " + time_text + "   You're out  -  " + n_left, false)
+	else:
+		_place_bar("Hide and Seek  " + time_text + "   Stay hidden!  -  " + n_left, false)
+
+	# a seeker doesn't get to read the hiders' names
+	if i_seek:
+		_hide_tags(hiders_left, players)
+	else:
+		_show_tags()
+
+	# a seeker near a hider: "F  Found!"
+	find_target = 0
+	if i_seek and players.has(me) and _hud_free():
+		var here = players[me].global_transform.origin
+		var s_me = _player_size(players[me])
+		var best = 999.0
+		for id in hiders_left:
+			if id == me or not players.has(id):
+				continue
+			var there = players[id].global_transform.origin
+			var d = _flat(there - here).length()
+			var reach = FIND_RANGE * (s_me + _player_size(players[id])) / 2.0
+			if d <= reach and abs(there.y - here.y) <= FIND_HEIGHT and d < best:
+				best = d
+				find_target = id
+		if find_target != 0:
+			_place_at_world(find_prompt, _over_head(players[find_target]))
+	_set_find_flag(find_target != 0)
+
+
+func _found_pressed():
+	var round_ = rounds.get(my_round)
+	if round_ == null or find_target == 0:
+		return
+	var who = find_target
+	_publish_tag(round_, who, _round_time(round_))
+	find_target = 0
+	find_prompt.visible = false
+	_show_toast("You found " + _name_of(who) + "!")
+
+
+func _finish_hide(round_, me, info, winner):
+	_restore_speeds()
+	_show_tags()
+	blackout.visible = false
+	for child in results_list.get_children():
+		results_list.remove_child(child)
+		child.queue_free()
+	results_title.text = "The seekers found everyone!" if winner == "seekers" else "The hiders win!"
+	var found = info["found"]
+	var never = []
+	var caught = []
+	for id in round_["ids"]:
+		if id == info["first"]:
+			continue
+		if found.has(id):
+			caught.append([found[id][0], id])
+		else:
+			never.append(id)
+	caught.sort_custom(self, "_by_time")
+	caught.invert()                # found last first: they hid best
+	for id in never:
+		_result_line(id, "never found!", true, me)
+	for entry in caught:
+		_result_line(entry[1], "found after " + _duration_text(entry[0]) + " by " + _name_of(found[entry[1]][1]), false, me)
+	if info["first"] != 0:
+		_result_line(info["first"], "seeker", false, me)
+	results_until = clock + RESULTS_TIME
+	results.visible = true
+	results.rect_size = Vector2()
+	_place_top(results, 0.2)
+	_notify(results_title.text)
+	_clear_mine()
+
+
+func _result_line(id, what, gold, me):
+	var line = Label.new()
+	var name = _name_of(id) + (" (you)" if id == me else "")
+	line.text = name + "  -  " + what
+	line.add_color_override("font_color", Color(1.0, 0.92, 0.55) if gold else Color(1, 1, 1))
+	results_list.add_child(line)
+
+
+# hiders' name tags (the "title" over their heads) are hidden from a seeker, and put back afterwards
+func _hide_tags(ids, players):
+	for id in hidden_tags.keys():
+		if not id in ids:
+			_show_tag(id)
+	for id in ids:
+		if hidden_tags.has(id) or not players.has(id):
+			continue
+		var tag = players[id].get_node_or_null("title")
+		if tag != null and tag is Spatial:
+			tag.visible = false
+			hidden_tags[id] = tag
+
+
+func _show_tag(id):
+	var tag = hidden_tags.get(id)
+	if tag != null and is_instance_valid(tag):
+		tag.visible = true
+	hidden_tags.erase(id)
+
+
+func _show_tags():
+	for id in hidden_tags.keys():
+		_show_tag(id)
+
+
+# lets Hugs and More know F is taken right now (it doesn't offer its own F prompt then)
+func _set_find_flag(on):
+	var root = get_tree().root if get_tree() != null else null
+	if root != null:
+		root.set_meta("playground_f", on)
+
+
+func _on_infect_toggled(on):
+	infect_choice = on
+	_save_config()
+
+
+func _over_head(player):
+	var size = _player_size(player)
+	var top = player.global_transform.origin + Vector3.UP * 2.2 * size
+	var sk = player.get_node_or_null(SKELETON_PATH)
+	if sk != null and sk.find_bone("head") >= 0:
+		top = sk.global_transform.xform(sk.get_bone_global_pose(sk.find_bone("head")).origin) + Vector3.UP * 1.7 * size
+	return top
+
+
+# a box on screen just above a point in the world
+func _place_at_world(control, world_pos):
+	var players = get_tree().get_nodes_in_group("controlled_player")
+	var view = players[0].get_viewport() if not players.empty() else null
+	var camera = view.get_camera() if view != null else null
+	if camera == null or camera.is_position_behind(world_pos):
+		control.visible = false
+		return
+	var at = camera.unproject_position(world_pos)
+	var holder = view.get_parent()
+	if holder is ViewportContainer and view.size.x > 0 and view.size.y > 0:
+		var box = holder.get_global_rect()
+		at = box.position + at * (box.size / view.size)
+	control.visible = true
+	control.rect_size = Vector2()
+	var size = control.get_combined_minimum_size() * control.rect_scale
+	control.rect_position = Vector2(at.x - size.x / 2.0, at.y - size.y)
+
+
 # --- running faster, and standing still for the countdown ---
 
-func _apply_speed(player, is_it, t):
+func _apply_speed(player, mult):
 	if player == null or not is_instance_valid(player):
 		return
 	if speed_owner != player:
@@ -595,9 +910,6 @@ func _apply_speed(player, is_it, t):
 		for v in SPEED_VARS + ["jump_height"]:
 			if player.get(v) != null:
 				base_speeds[v] = player.get(v)
-	var mult = 1.0
-	if is_it:
-		mult = 0.0 if t < 0.0 else IT_SPEED
 	for v in base_speeds.keys():
 		var want = base_speeds[v] * mult if v != "jump_height" else (0.0 if mult == 0.0 else base_speeds[v])
 		if player.get(v) != want:
@@ -620,7 +932,7 @@ func _update_icons(players):
 	var me = int(net.STEAM_ID) if net != null else 0
 	for r in rounds.keys():
 		var round_ = rounds[r]
-		if round_["go_at"] < 0 or round_["ended"]:
+		if round_["go_at"] < 0 or round_["ended"] or round_["kind"] != "tag":
 			continue
 		var t = _round_time(round_)
 		if t >= round_["duration"]:
@@ -746,12 +1058,12 @@ func _update_invite(me):
 	if show != invite_round:
 		invite_round = show
 		if show != "":
-			_notify(_name_of(rounds[show]["host"]) + " is starting a round of tag! Press Y to join.")
+			_notify(_name_of(rounds[show]["host"]) + " is starting " + _game_phrase(rounds[show]) + "! Press Y to join.")
 	if invite_round == "":
 		invite_panel.visible = false
 		return
 	var left = JOIN_TIME - (clock - rounds[invite_round]["open_at"])
-	invite_label.text = _name_of(rounds[invite_round]["host"]) + " is starting a round of Tag!"
+	invite_label.text = _name_of(rounds[invite_round]["host"]) + " is starting " + _game_phrase(rounds[invite_round]) + "!"
 	invite_yes.text = "Join (Y)  " + str(int(ceil(max(left, 0.0)))) + "s"
 	invite_panel.visible = _hud_free()
 	_place_top(invite_panel, 0.18)
@@ -762,6 +1074,8 @@ func _on_join():
 		return
 	answered[invite_round] = true
 	my_round = invite_round
+	my_kind = rounds[invite_round]["kind"]
+	my_infect = rounds[invite_round]["infect"]
 	my_since = rounds[invite_round]["open_at"]
 	my_n = -1
 	started = false
@@ -812,6 +1126,9 @@ func _input(event):
 	if event.scancode == JOIN_KEY and invite_round != "" and invite_panel.visible:
 		_on_join()
 		get_tree().set_input_as_handled()
+	elif event.scancode == FIND_KEY and find_target != 0 and find_prompt.visible:
+		_found_pressed()
+		get_tree().set_input_as_handled()
 	elif event.scancode == MENU_KEY:
 		if menu.visible:
 			_close_menu()
@@ -845,6 +1162,8 @@ func _update_menu():
 		return
 	var busy = my_round != ""
 	menu_tag.disabled = busy
+	menu_hide.disabled = busy
+	menu_infect.disabled = busy
 	menu_leave.visible = busy
 	menu_swing.text = "Pick up your swing set" if swing != null and swing.has_set() else "Place a swing set"
 	if not busy:
@@ -852,7 +1171,7 @@ func _update_menu():
 	elif my_role == "open":
 		menu_status.text = "Waiting for players to join..."
 	else:
-		menu_status.text = "You're in a round of tag."
+		menu_status.text = "You're in a round of " + GAME_NAMES[my_kind] + "."
 	_place_menu()
 
 
@@ -922,7 +1241,7 @@ func _refresh_button():
 		theme_applied = true
 		var main = hud.get_node_or_null("main")
 		if main != null and main.theme != null:
-			for control in [star_button, menu, invite_panel, wait_panel, bar, big, hint, results, toast] + themed:
+			for control in [star_button, menu, invite_panel, wait_panel, bar, big, hint, results, toast, find_prompt] + themed:
 				control.theme = main.theme
 	if not show and menu.visible:
 		_close_menu()
@@ -948,13 +1267,16 @@ func _load_config():
 	file.close()
 	if typeof(data) == TYPE_DICTIONARY and data.has("x") and data.has("y"):
 		star_button.rect_position = Vector2(float(data["x"]), float(data["y"]))
+	if typeof(data) == TYPE_DICTIONARY and data.has("infect"):
+		infect_choice = bool(data["infect"])
+		menu_infect.pressed = infect_choice
 
 
 func _save_config():
 	var file = File.new()
 	if file.open(CONFIG_PATH, File.WRITE) != OK:
 		return
-	file.store_string(to_json({"x": star_button.rect_position.x, "y": star_button.rect_position.y}))
+	file.store_string(to_json({"x": star_button.rect_position.x, "y": star_button.rect_position.y, "infect": infect_choice}))
 	file.close()
 
 
@@ -1011,6 +1333,18 @@ func _build_ui():
 	column.add_child(menu_status)
 	menu_tag = _button("Start a round of Tag", "start_tag")
 	column.add_child(menu_tag)
+	menu_hide = _button("Start Hide and Seek", "start_hide")
+	column.add_child(menu_hide)
+	menu_infect = CheckBox.new()
+	menu_infect.text = "Found hiders join the seekers"
+	menu_infect.pressed = infect_choice
+	menu_infect.focus_mode = Control.FOCUS_NONE
+	menu_infect.add_color_override("font_color", Color(1, 1, 1, 0.9))
+	menu_infect.add_color_override("font_color_hover", Color(1, 1, 1))
+	menu_infect.add_color_override("font_color_pressed", Color(1, 1, 1))
+	menu_infect.connect("toggled", self, "_on_infect_toggled")
+	_add_tooltip(menu_infect, "Hide and Seek", "On: found hiders become seekers and help find the rest. Off: found hiders are out and watch.")
+	column.add_child(menu_infect)
 	menu_leave = _button("Leave the round", "_on_leave_pressed")
 	column.add_child(menu_leave)
 	menu_swing = _button("Place a swing set", "_on_swing_pressed")
@@ -1046,6 +1380,30 @@ func _build_ui():
 	bar_label.add_color_override("font_color", Color(1, 1, 1))
 	_margin(bar).add_child(bar_label)
 
+	# the seeker's eyes, closed while the others hide (under the countdown numbers)
+	blackout = ColorRect.new()
+	blackout.color = Color(0.02, 0.03, 0.05, 1.0)
+	blackout.visible = false
+	blackout.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(blackout)
+
+	# "F  Found!" over a hider, for a seeker who is close enough
+	find_prompt = _panel(0.55)
+	find_prompt.visible = false
+	find_prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var frow = HBoxContainer.new()
+	frow.add_constant_override("separation", 6)
+	frow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	find_prompt.add_child(frow)
+	var fkey = Label.new()
+	fkey.text = "F"
+	fkey.add_color_override("font_color", Color(0.55, 1.0, 1.0))
+	frow.add_child(fkey)
+	var fword = Label.new()
+	fword.text = "Found!"
+	fword.add_color_override("font_color", Color(1, 1, 1, 0.95))
+	frow.add_child(fword)
+
 	# the big countdown numbers
 	big = Label.new()
 	big.visible = false
@@ -1074,10 +1432,10 @@ func _build_ui():
 	results = _panel(0.8)
 	results.visible = false
 	var rcol = _column(results)
-	var rtitle = Label.new()
-	rtitle.text = "Tag is over! Least time as it wins"
-	rtitle.add_color_override("font_color", Color(0.75, 0.95, 1.0))
-	rcol.add_child(rtitle)
+	results_title = Label.new()
+	results_title.text = "Tag is over! Least time as it wins"
+	results_title.add_color_override("font_color", Color(0.75, 0.95, 1.0))
+	rcol.add_child(results_title)
 	results_list = VBoxContainer.new()
 	results_list.add_constant_override("separation", 2)
 	rcol.add_child(results_list)
