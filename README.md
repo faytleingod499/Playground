@@ -40,3 +40,7 @@ godot --no-window -s pack.gd
 ```
 
 `pack.gd` packs `source/mods/Playground/` into the pck. `build.sh` then makes `out/Playground-mod.zip` (the folder for `GDWeave/mods`) and the Thunderstore upload zip from `thunderstore/`. Requires [GDWeave](https://thunderstore.io/c/webfishing/p/NotNet/GDWeave/).
+
+## License
+
+[MIT](LICENSE): you are free to copy, change and share your own versions of this mod, as long as you keep the copyright notice.
