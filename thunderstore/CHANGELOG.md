@@ -1,3 +1,6 @@
+## 1.2.6
+- Tag: the star no longer stays over a player after they've left the round, or once everyone has left.
+
 ## 1.2.5
 - The mod has its own GitHub repository now: https://github.com/faytleingod499/Playground
 - Released under the MIT License: you're free to copy, change and share your own versions.

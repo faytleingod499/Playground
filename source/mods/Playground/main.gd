@@ -22,7 +22,7 @@ extends Node
 # <n>;<target>;<t> is the last tag that player made: tag number n made <target> "it", <t> seconds into the
 # round (by the tagger's clock). The starter's tag 0 is the first "it". The highest number is "it" now.
 
-const VERSION = "1.2.5"
+const VERSION = "1.2.6"
 const SYNC_KEY = "playground"
 const SKELETON_PATH = "body/player_body/Armature/Skeleton"
 const POPUP_ID = "PLAYGROUND"
@@ -603,6 +603,8 @@ func _restore_speeds():
 
 func _update_icons(players):
 	var want = {}
+	var net = get_node_or_null("/root/Network")
+	var me = int(net.STEAM_ID) if net != null else 0
 	for r in rounds.keys():
 		var round_ = rounds[r]
 		if round_["go_at"] < 0 or round_["ended"]:
@@ -610,8 +612,14 @@ func _update_icons(players):
 		var t = _round_time(round_)
 		if t >= round_["duration"]:
 			continue
+		# only while the round is really still on: "it" is still playing, and so is someone to chase
+		var active = _active(r, round_, me)
+		if active.size() < 2:
+			if t >= 0.0 and r != my_round:
+				round_["ended"] = true   # everyone left: it's over, for those watching too
+			continue
 		var it = _current_it(round_)
-		if it > 0 and players.has(it):
+		if it > 0 and it in active and players.has(it):
 			want[it] = players[it]
 	for id in icons.keys():
 		if not want.has(id) or not is_instance_valid(icons[id]) or icons[id].get_parent() != want[id]:
