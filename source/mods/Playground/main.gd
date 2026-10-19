@@ -82,6 +82,7 @@ var it_gone_since = -1.0
 var it_since_t = 0.0         # round time I became "it"
 var tagged_by = 0            # who made me "it"
 var last_it = 0
+var last_picked = 0          # who was picked as "it" / first seeker in the last round I saw start, not picked twice in a row
 var base_speeds = {}         # my player's own speeds, put back when the round is over
 var speed_owner = null
 var results_until = -1.0
@@ -312,6 +313,8 @@ func _update_rounds(me):
 			round_["duration"] = s["duration"]
 		if s["role"] in ["go", "play"] and s["n"] >= 0 and not round_["events"].has(s["n"]):
 			round_["events"][s["n"]] = {"target": s["target"], "t": s["t"], "by": id}
+			if s["n"] == 0 and round_["go_at"] >= 0:
+				last_picked = int(s["target"])
 			if round_["go_at"] >= 0 and r == my_round and s["n"] > 0 and id != me:
 				if round_["kind"] == "hide":
 					if s["target"] != me:
@@ -443,7 +446,15 @@ func _update_my_round(players, me):
 			my_ids = [me] + joined
 			my_duration = SEEK_TIME if my_kind == "hide" else ROUND_TIME
 			my_n = 0
-			my_target = my_ids[randi() % my_ids.size()]
+			# random, but not whoever was picked last round (when there is anyone else to pick)
+			var pool = []
+			for id in my_ids:
+				if int(id) != last_picked:
+					pool.append(id)
+			if pool.empty():
+				pool = my_ids
+			my_target = pool[randi() % pool.size()]
+			last_picked = int(my_target)
 			my_t = 0.0
 			_say("go")
 			_flush_state()

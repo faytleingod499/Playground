@@ -1,3 +1,7 @@
+## 1.3.2
+- Tag and Hide and Seek: whoever was picked as "it" or the seeker last round isn't picked again for the next one
+  (as long as there's someone else to pick), so nobody gets stuck with it twice in a row.
+
 ## 1.3.1
 - Hide and Seek: seekers really can't see the hiders' names now. (The name tag is moved out of the player when it
   spawns, so the old way of hiding it missed it.) Speech bubbles still show, so talking gives you away.
