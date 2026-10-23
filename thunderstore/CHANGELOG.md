@@ -1,3 +1,7 @@
+## 1.3.3
+- The Playground menu shows how many other players here have Playground ("2 others here", in cyan when anyone's
+  around), so you can see if there's someone to start a game with.
+
 ## 1.3.2
 - Tag and Hide and Seek: whoever was picked as "it" or the seeker last round isn't picked again for the next one
   (as long as there's someone else to pick), so nobody gets stuck with it twice in a row.

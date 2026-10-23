@@ -29,7 +29,7 @@ extends Node
 # <n>;<target>;<t> is the last tag that player made: tag number n made <target> "it", <t> seconds into the
 # round (by the tagger's clock). The starter's tag 0 is the first "it". The highest number is "it" now.
 
-const VERSION = "1.3.0"
+const VERSION = "1.3.3"
 const SYNC_KEY = "playground"
 const SKELETON_PATH = "body/player_body/Armature/Skeleton"
 const POPUP_ID = "PLAYGROUND"
@@ -91,6 +91,8 @@ var results_until = -1.0
 var layer
 var menu
 var menu_status
+var menu_count
+var next_count = 0.0
 var menu_tag
 var menu_hide
 var menu_infect
@@ -1180,9 +1182,29 @@ func _close_menu():
 		star_button.update()
 
 
+# everyone else in the lobby whose game says it has Playground (it writes its version as "playground_v")
+func _others_with_playground():
+	var net = get_node_or_null("/root/Network")
+	if net == null or steam == null or net.STEAM_LOBBY_ID <= 0 or typeof(net.get("LOBBY_MEMBERS")) != TYPE_ARRAY:
+		return 0
+	var n = 0
+	for member in net.LOBBY_MEMBERS:
+		var id = int(member.get("steam_id", 0))
+		if id <= 0 or id == int(net.STEAM_ID):
+			continue
+		if str(steam.getLobbyMemberData(net.STEAM_LOBBY_ID, id, SYNC_KEY + "_v")) != "":
+			n += 1
+	return n
+
+
 func _update_menu():
 	if not menu.visible:
 		return
+	if clock >= next_count:
+		next_count = clock + 1.0
+		var n = _others_with_playground()
+		menu_count.text = ("1 other here" if n == 1 else str(n) + " others here")
+		menu_count.add_color_override("font_color", Color(0.55, 1.0, 1.0) if n > 0 else Color(1, 1, 1, 0.5))
 	var busy = my_round != ""
 	menu_tag.disabled = busy
 	menu_hide.disabled = busy
@@ -1349,6 +1371,10 @@ func _build_ui():
 	title.add_color_override("font_color", Color(0.75, 0.95, 1.0))
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
+	# how many others here have Playground, to see if anyone's around to play
+	menu_count = Label.new()
+	menu_count.add_color_override("font_color", Color(1, 1, 1, 0.7))
+	head.add_child(menu_count)
 	var close = _button("x", "_close_menu")
 	head.add_child(close)
 	menu_status = Label.new()
