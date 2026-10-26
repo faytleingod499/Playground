@@ -1,8 +1,8 @@
 {
     "name": "Playground",
-    "version_number": "1.3.3",
+    "version_number": "1.4.0",
     "website_url": "https://github.com/faytleingod499/Playground",
-    "description": "Games and toys for everyone who has the mod, on any server: Tag, Hide and Seek, and a two-seat swing set you can pump higher and launch from. This mod was created with the assistance of AI.",
+    "description": "Games and toys for everyone who has the mod, on any server: Tag, Hide and Seek, a two-seat swing set, and a bowling lane with pins and a ball. This mod was created with the assistance of AI.",
     "dependencies": [
         "NotNet-GDWeave-2.0.14"
     ]

@@ -1,7 +1,8 @@
 extends Node
 
 # Playground
-# Games for everyone who has the mod, on any server: Tag and Hide and Seek (and a swing set, swing.gd).
+# Games for everyone who has the mod, on any server: Tag and Hide and Seek (and a swing set, swing.gd, and
+# bowling, bowling.gd with its physics in bowl_sim.gd).
 #
 # Hide and Seek: the same join window and trip to spawn, then one seeker (picked at random) counts to 45
 # with their screen dark and can't move while everyone else hides. For the next 5 minutes the seeker
@@ -29,7 +30,7 @@ extends Node
 # <n>;<target>;<t> is the last tag that player made: tag number n made <target> "it", <t> seconds into the
 # round (by the tagger's clock). The starter's tag 0 is the first "it". The highest number is "it" now.
 
-const VERSION = "1.3.3"
+const VERSION = "1.4.0"
 const SYNC_KEY = "playground"
 const SKELETON_PATH = "body/player_body/Armature/Skeleton"
 const POPUP_ID = "PLAYGROUND"
@@ -131,6 +132,8 @@ var theme_applied = false
 var themed = []              # more of my windows (the swing's) that get the game's font
 var swing                    # the swing set (swing.gd)
 var menu_swing
+var bowling                  # the bowling lane (bowling.gd)
+var menu_lane
 
 
 func _ready():
@@ -144,6 +147,10 @@ func _ready():
 	swing.name = "Swing"
 	swing.main = self
 	add_child(swing)
+	bowling = load("res://mods/Playground/bowling.gd").new()
+	bowling.name = "Bowling"
+	bowling.main = self
+	add_child(bowling)
 
 
 func _exit_tree():
@@ -1211,6 +1218,7 @@ func _update_menu():
 	menu_infect.disabled = busy
 	menu_leave.visible = busy
 	menu_swing.text = "Pick up your swing set" if swing != null and swing.has_set() else "Place a swing set"
+	menu_lane.text = "Pick up your bowling lane" if bowling != null and bowling.has_lane() else "Place a bowling lane"
 	if not busy:
 		menu_status.text = "Play with everyone who has Playground."
 	elif my_role == "open":
@@ -1398,6 +1406,8 @@ func _build_ui():
 	column.add_child(menu_leave)
 	menu_swing = _button("Place a swing set", "_on_swing_pressed")
 	column.add_child(menu_swing)
+	menu_lane = _button("Place a bowling lane", "_on_lane_pressed")
+	column.add_child(menu_lane)
 
 	# "<name> is starting a round of Tag!  [Join (Y) 9s]  [No thanks]"
 	invite_panel = _panel(0.75)
@@ -1510,6 +1520,14 @@ func _on_swing_pressed():
 		swing.remove_set()
 	else:
 		swing.place_set()
+	_close_menu()
+
+
+func _on_lane_pressed():
+	if bowling.has_lane():
+		bowling.remove_lane()
+	else:
+		bowling.place_lane()
 	_close_menu()
 
 

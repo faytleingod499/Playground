@@ -1,3 +1,9 @@
+## 1.4.0
+- New: bowling. Put a lane down from the Playground menu ("Place a bowling lane"): it runs away from you with ten pins at the far end. Walk onto the approach and press E to bowl.
+- A and D slide you across the lane, the left and right arrow keys turn your aim, Space starts the power bar and Space again rolls. Pins knock into each other, with ten frames and the usual scoring (strikes, spares, bonus balls).
+- Everyone with Playground sees the same pins fall, hears the crash, and sees a score board for the lane. A strike gets announced to the others nearby.
+- Menu: "Place a bowling lane" / "Pick up your bowling lane". The ground has to be fairly flat, and one person bowls at a time.
+
 ## 1.3.3
 - The Playground menu shows how many other players here have Playground ("2 others here", in cyan when anyone's
   around), so you can see if there's someone to start a game with.

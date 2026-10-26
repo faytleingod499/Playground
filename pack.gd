@@ -2,7 +2,7 @@
 # Run from this folder with:  godot --no-window -s pack.gd
 extends SceneTree
 
-const FILES = ["main.gd", "swing.gd", "swing.scn"]
+const FILES = ["main.gd", "swing.gd", "swing.scn", "bowl_sim.gd", "bowling.gd"]
 
 func _init():
 	var out = OS.get_environment("PCK_OUT")

@@ -1,6 +1,6 @@
 # Playground
 
-Games and toys to enjoy with everyone who has the mod, on any server: **Tag**, **Hide and Seek** and a **swing set**, with more on the way.
+Games and toys to enjoy with everyone who has the mod, on any server: **Tag**, **Hide and Seek**, a **swing set** and **bowling**, with more on the way.
 
 *This mod was created with the assistance of AI.*
 
@@ -34,6 +34,17 @@ You can leave a round any time from the J menu. If whoever is it leaves, someone
 5. Press **E** to get off.
 
 Players with Playground see the swing set. Players without it still see you sitting and swinging, just in mid air.
+
+## Bowling
+
+1. Open the Playground menu and choose **Place a bowling lane**. A lane runs away from you with ten pins at the far end. Choose **Pick up your bowling lane** to take it down. The ground needs to be fairly flat.
+2. Walk onto the approach (the floor in front of the lane) and press **E** to bowl. One person bowls on a lane at a time.
+3. **A** and **D** slide you across the lane. The **left** and **right arrow keys** turn your aim; a faint line shows where the ball will go.
+4. Press **Space** to start the power bar, and **Space** again to roll. The fuller the bar, the faster the ball.
+5. Pins knock into each other. Ten frames, two balls each, strikes and spares count extra, and the tenth frame gives bonus balls. A score board for the lane shows for everyone nearby.
+6. After the last ball press **Space** for a new game, or **E** to leave the lane.
+
+Everyone with Playground sees the same pins fall. Players without it don't see the lane.
 
 ## Good to know
 
