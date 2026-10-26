@@ -1,3 +1,8 @@
+## 1.5.0
+- Bowling: spin! The left and right arrow keys now curl the ball. It runs straight over the oily first stretch, then hooks toward the side you spun, so you can start wide and swing back into the pocket. The dotted trail on the lane bends to show where the ball will go, and the help line shows your spin.
+- Q and R turn your aim now (the arrow keys were aim before). A and D still slide you across the lane.
+- Everyone sees the hook. Players on an older version still see the roll, but without the curve.
+
 ## 1.4.0
 - New: bowling. Put a lane down from the Playground menu ("Place a bowling lane"): it runs away from you with ten pins at the far end. Walk onto the approach and press E to bowl.
 - A and D slide you across the lane, the left and right arrow keys turn your aim, Space starts the power bar and Space again rolls. Pins knock into each other, with ten frames and the usual scoring (strikes, spares, bonus balls).

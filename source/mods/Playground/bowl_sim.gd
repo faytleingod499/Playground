@@ -26,10 +26,14 @@ const DRAG = 3.2              # per second, how fast a knocked pin slows
 const SLIDE = 3.0             # plus this much m/s^2
 const FALL_TIME = 0.45        # a hit pin takes this long to go over
 const MAX_TIME = 7.0
+const HOOK = 0.04             # how much a full spin turns the ball, in radians per metre rolled, once it's out of the oil
+const HOOK_FROM = 4.5         # the first stretch of the lane is oily: the ball runs straight, then hooks
 const ALL = 1023
 
 var ball = Vector2()
 var ball_v = Vector2()
+var spin = 0.0                # -1 (hooks left) to 1 (hooks right)
+var touched = false           # the ball has hit a pin, so it stops curving
 var ball_in = false           # ball is in play (on the lane or in the gutter)
 var gutter = false
 var ball_gone = false         # past the pins
@@ -45,6 +49,33 @@ var knocked_now = 0           # how many went over in this roll so far
 var events = []               # [time, 0 ball hit a pin | 1 pin hit a pin, where], for the sounds
 
 
+# how much the ball bites at a distance down the lane: nothing in the oil, then more and more
+static func _oil(d):
+	return clamp((d - HOOK_FROM) / (HEAD - HOOK_FROM), 0.0, 1.0)
+
+
+# where a ball will go with no pins in the way: [position, heading] every `spacing` metres down the lane
+static func path_points(u0, angle, spin_, spacing, reach):
+	var pts = []
+	var pos = Vector2(clamp(u0, -0.95, 0.95), 0.0)
+	var a = angle
+	var ds = 0.02
+	var next = 0.0
+	var gut = false
+	while pos.y < reach:
+		if pos.y >= next:
+			pts.append([pos, a])
+			next += spacing
+		if not gut and abs(pos.x) > LANE_HALF + 0.02:
+			gut = true
+			a = 0.0
+			pos.x = GUTTER_AT * sign(pos.x)
+		if not gut:
+			a += spin_ * HOOK * _oil(pos.y) * ds
+		pos += Vector2(sin(a), cos(a)) * ds
+	return pts
+
+
 static func pin_home(i):
 	# rows of 1, 2, 3 and 4; pin 0 is the head pin, the back row is 6 to 9
 	var row = 0
@@ -58,7 +89,7 @@ static func pin_home(i):
 	return Vector2((k - row / 2.0) * SPACING, HEAD + row * ROW)
 
 
-func start(mask, u0, angle, speed):
+func start(mask, u0, angle, speed, spin_ = 0.0):
 	pin_p = []
 	pin_v = []
 	pin_state = []
@@ -74,6 +105,8 @@ func start(mask, u0, angle, speed):
 		pin_speed0.append(0.0)
 	ball = Vector2(clamp(u0, -0.95, 0.95), 0.0)
 	ball_v = Vector2(sin(angle), cos(angle)) * speed
+	spin = clamp(spin_, -1.0, 1.0)
+	touched = false
 	ball_in = true
 	gutter = false
 	ball_gone = false
@@ -97,6 +130,9 @@ func step():
 	time += DT
 	# the ball
 	if ball_in and not ball_gone:
+		if not gutter and not touched and spin != 0.0:
+			var turn = spin * HOOK * _oil(ball.y) * ball_v.length() * DT
+			ball_v = ball_v.rotated(-turn)
 		ball += ball_v * DT
 		if not gutter and abs(ball.x) > LANE_HALF + 0.02:
 			gutter = true
@@ -157,6 +193,7 @@ func _ball_hits(i):
 	var rel = ball_v.dot(n)
 	if rel <= 0.0:
 		return
+	touched = true
 	var j = (1.0 + BOUNCE) * rel / (1.0 / BALL_MASS + 1.0 / PIN_MASS)
 	ball_v -= n * (j / BALL_MASS)
 	_knock(i, n * (j / PIN_MASS))

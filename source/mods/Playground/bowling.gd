@@ -29,6 +29,8 @@ const NEXT_AFTER = 1.6       # and before the next ball is up
 const LEVEL_LIMIT = 0.9      # the ground under the lane can differ this much, or it's too bumpy
 const MOVE_SPEED = 0.9       # across the lane, metres per second
 const AIM_SPEED = 0.09       # radians per second
+const SPIN_SPEED = 1.1       # how fast the arrow keys turn the spin up (the whole range is -1 to 1)
+const DOTS = 22              # the dots that show where the ball will go
 const AIM_MAX = 0.14
 const SLOW = 6.5             # the softest and hardest roll, metres per second
 const FAST = 15.5
@@ -55,6 +57,7 @@ var mode = 0                 # 0 not bowling, 1 aiming, 2 power bar, 3 the ball 
 var bowl_owner = 0
 var u0 = 0.0                 # where I stand across the lane (+ is my right)
 var aim = 0.0
+var spin = 0.0               # -1 hooks left, +1 hooks right
 var meter_t = 0.0
 var rolls = []               # pins knocked by each of my rolls this game
 var mask = 1023              # pins up for my next roll
@@ -310,12 +313,13 @@ func _play_roll_text(text):
 	var owner = int(b[1])
 	if not lanes.has(owner):
 		return
-	_start_roll(lanes[owner], int(b[3]), int(b[4]) / 100.0, int(b[5]) / 1000.0, int(b[6]) / 10.0)
+	var sp = int(b[7]) / 100.0 if b.size() >= 8 else 0.0
+	_start_roll(lanes[owner], int(b[3]), int(b[4]) / 100.0, int(b[5]) / 1000.0, int(b[6]) / 10.0, sp)
 
 
-func _start_roll(l, pins_up, u, angle, speed):
+func _start_roll(l, pins_up, u, angle, speed, spin_ = 0.0):
 	l["sim"] = Sim.new()
-	l["sim"].start(pins_up, u, angle, speed)
+	l["sim"].start(pins_up, u, angle, speed, spin_)
 	l["acc"] = 0.0
 	l["events_i"] = 0
 	l["sweep_at"] = -1.0
@@ -352,7 +356,7 @@ func _make_materials():
 		materials[k].roughness = 0.25
 		materials[k].metallic = 0.3
 	materials["aim"] = SpatialMaterial.new()
-	materials["aim"].albedo_color = Color(0.55, 1.0, 1.0, 0.45)
+	materials["aim"].albedo_color = Color(0.1, 0.5, 1.0, 0.85)
 	materials["aim"].flags_transparent = true
 	materials["aim"].flags_unshaded = true
 
@@ -641,6 +645,7 @@ func _enter(owner):
 	mode = 1
 	u0 = 0.0
 	aim = 0.0
+	spin = 0.0
 	rolls = []
 	mask = 1023
 	was_locked = me.get("locked") == true
@@ -648,13 +653,16 @@ func _enter(owner):
 	clear_score_at = -1.0
 	_publish(true)
 	if aim_line == null:
-		aim_line = MeshInstance.new()
+		aim_line = Spatial.new()
 		var cube = CubeMesh.new()
-		cube.size = Vector3(0.05, 0.004, 1.0)
-		aim_line.mesh = cube
-		aim_line.material_override = materials["aim"]
+		cube.size = Vector3(0.07, 0.004, 0.24)
+		for i in range(DOTS):
+			var dot = MeshInstance.new()
+			dot.mesh = cube
+			dot.material_override = materials["aim"]
+			aim_line.add_child(dot)
 	_attach_aim()
-	main._show_toast("Bowling! A / D slide, arrow keys aim, Space for power.")
+	main._show_toast("Bowling! A / D slide, Q / R aim, arrow keys spin, Space for power.")
 
 
 func _attach_aim():
@@ -667,11 +675,16 @@ func _attach_aim():
 
 
 func _place_aim(l):
-	# a faint strip from the ball down the way it will go
-	var reach = Sim.HEAD + 1.0
-	var angle = -aim                                   # lane space has x the other way round
-	var dirv = Vector3(sin(angle), 0, cos(angle))
-	aim_line.transform = Transform(Basis(Vector3.UP, angle).scaled(Vector3(1, 1, reach)), Vector3(-u0, 0.058, 0.0) + dirv * (reach / 2.0))
+	# a trail of dots from the ball down the way it will go, curving if it has spin
+	var pts = Sim.path_points(u0, aim, spin, 0.7, Sim.HEAD + 0.2)
+	var dots = aim_line.get_children()
+	for i in range(dots.size()):
+		if i < pts.size():
+			var at = pts[i][0]
+			dots[i].visible = true
+			dots[i].transform = Transform(Basis(Vector3.UP, -pts[i][1]), Vector3(-at.x, 0.062, at.y))
+		else:
+			dots[i].visible = false
 	aim_line.visible = mode == 1 or mode == 2
 
 
@@ -705,20 +718,10 @@ func _bowl(me, delta):
 		if Input.is_key_pressed(KEY_A):
 			moving -= 1.0
 		u0 = clamp(u0 + moving * MOVE_SPEED * delta, -0.95, 0.95)
-		var turning = 0.0
-		if Input.is_key_pressed(KEY_RIGHT):
-			turning += 1.0
-		if Input.is_key_pressed(KEY_LEFT):
-			turning -= 1.0
-		aim = clamp(aim + turning * AIM_SPEED * delta, -AIM_MAX, AIM_MAX)
+		_steer(delta)
 	elif mode == 2:
 		meter_t += delta / (METER_PERIOD / 2.0)
-		var turning2 = 0.0
-		if Input.is_key_pressed(KEY_RIGHT):
-			turning2 += 1.0
-		if Input.is_key_pressed(KEY_LEFT):
-			turning2 -= 1.0
-		aim = clamp(aim + turning2 * AIM_SPEED * delta, -AIM_MAX, AIM_MAX)
+		_steer(delta)
 	elif mode == 3:
 		# after my roll finishes, count the pins and get the next ball ready
 		if l["sim"] != null and l["sim"].done and next_at < 0.0:
@@ -744,6 +747,28 @@ func _bowl(me, delta):
 	me.rotation.y = l["yaw"] + PI
 
 
+# Q / R turn the aim, the arrow keys put spin on the ball
+func _steer(delta):
+	var turning = 0.0
+	if Input.is_key_pressed(KEY_R):
+		turning += 1.0
+	if Input.is_key_pressed(KEY_Q):
+		turning -= 1.0
+	aim = clamp(aim + turning * AIM_SPEED * delta, -AIM_MAX, AIM_MAX)
+	var curl = 0.0
+	if Input.is_key_pressed(KEY_RIGHT):
+		curl += 1.0
+	if Input.is_key_pressed(KEY_LEFT):
+		curl -= 1.0
+	spin = clamp(spin + curl * SPIN_SPEED * delta, -1.0, 1.0)
+
+
+func _spin_text():
+	if abs(spin) < 0.05:
+		return "no spin"
+	return ("spin right " if spin > 0.0 else "spin left ") + str(int(round(abs(spin) * 100.0))) + "%"
+
+
 func _throw():
 	var l = lanes.get(bowl_owner)
 	if l == null:
@@ -755,12 +780,13 @@ func _throw():
 	var uq = int(round(u0 * 100.0))
 	var aq = int(round(aim * 1000.0))
 	var sq = int(round(speed * 10.0))
-	var text = "1;%d;%d;%d;%d;%d;%d" % [bowl_owner, roll_n + int(OS.get_unix_time() % 100000) * 100, mask, uq, aq, sq]
+	var pq = int(round(spin * 100.0))
+	var text = "1;%d;%d;%d;%d;%d;%d;%d" % [bowl_owner, roll_n + int(OS.get_unix_time() % 100000) * 100, mask, uq, aq, sq, pq]
 	_write(ROLL_KEY, text)
 	mode = 3
 	next_at = -1.0
 	# I start it the same way everyone else will, from the same whole numbers
-	_start_roll(l, mask, uq / 100.0, aq / 1000.0, sq / 10.0)
+	_start_roll(l, mask, uq / 100.0, aq / 1000.0, sq / 10.0, pq / 100.0)
 	if aim_line != null:
 		aim_line.visible = false
 	# still at the line, but rolling: nobody else can step up, and nobody resets the pins
@@ -894,9 +920,9 @@ func _update_hud():
 		return
 	hud_panel.visible = true
 	if mode == 1:
-		hint_label.text = "A / D: slide      Left / Right: aim      Space: ready      E: leave"
+		hint_label.text = "A / D: slide      Q / R: aim      Left / Right: spin (" + _spin_text() + ")\nSpace: ready      E: leave"
 	elif mode == 2:
-		hint_label.text = "Space to roll!      Left / Right: aim"
+		hint_label.text = "Space to roll!      Q / R: aim      Left / Right: spin (" + _spin_text() + ")"
 	elif mode == 3:
 		hint_label.text = "..."
 	else:
